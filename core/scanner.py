@@ -596,14 +596,14 @@ class SystemScanner:
                                 file_info = FileInfo(
                                     path=item,
                                     size=stat.st_size,
-                                modified_time=datetime.fromtimestamp(stat.st_mtime),
-                                accessed_time=datetime.fromtimestamp(stat.st_atime),
-                                category=FileCategory.OLD_FILES,
-                                priority=CleaningPriority.OPTIONAL,
-                                is_safe_to_delete=True,
-                                description=f"Not accessed for {age.days} days"
-                            )
-                            result.add_file(file_info)
+                                    modified_time=datetime.fromtimestamp(stat.st_mtime),
+                                    accessed_time=datetime.fromtimestamp(stat.st_atime),
+                                    category=FileCategory.OLD_FILES,
+                                    priority=CleaningPriority.OPTIONAL,
+                                    is_safe_to_delete=True,
+                                    description=f"Not accessed for {age.days} days"
+                                )
+                                result.add_file(file_info)
                         except (OSError, PermissionError):
                             continue
             except (PermissionError, OSError):
