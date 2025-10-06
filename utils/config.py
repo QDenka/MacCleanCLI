@@ -4,8 +4,12 @@ Configuration management for macOS Cleaner
 
 import json
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, asdict, field
+
+
+class ConfigValidationError(ValueError):
+    pass
 
 
 @dataclass
@@ -43,20 +47,49 @@ class Config:
     max_files_display: int = 50
 
     # Safety settings
-    protected_extensions: list = field(default_factory=lambda: [
+    protected_extensions: List[str] = field(default_factory=lambda: [
         '.app', '.framework', '.dylib', '.so', '.bundle',
         '.kext', '.plugin', '.prefPane', '.qlgenerator'
     ])
 
-    protected_directories: list = field(default_factory=lambda: [
+    protected_directories: List[str] = field(default_factory=lambda: [
         '/System', '/Library/Extensions', '/usr/bin', '/usr/sbin',
         '/Applications', '/private/etc'
     ])
 
-    def __post_init__(self):
-        """Initialize paths."""
+    def __post_init__(self) -> None:
         if isinstance(self.backup_dir, str):
             self.backup_dir = Path(self.backup_dir)
+        self.validate()
+
+    def validate(self) -> None:
+        errors: List[str] = []
+
+        if self.max_workers <= 0:
+            errors.append("max_workers must be positive")
+        if self.max_workers > 32:
+            errors.append("max_workers too high (max 32)")
+
+        if self.backup_retention_days < 0:
+            errors.append("backup_retention_days cannot be negative")
+
+        if self.min_file_size_mb < 0:
+            errors.append("min_file_size_mb cannot be negative")
+
+        if self.large_file_threshold_mb <= 0:
+            errors.append("large_file_threshold_mb must be positive")
+
+        if self.max_file_age_days < 0:
+            errors.append("max_file_age_days cannot be negative")
+
+        if self.max_files_display < 1:
+            errors.append("max_files_display must be at least 1")
+
+        if not self.backup_dir.parent.exists():
+            errors.append(f"backup_dir parent directory does not exist: {self.backup_dir.parent}")
+
+        if errors:
+            raise ConfigValidationError("; ".join(errors))
 
     @classmethod
     def load_from_file(cls, config_file: Path) -> 'Config':

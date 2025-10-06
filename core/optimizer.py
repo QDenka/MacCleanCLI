@@ -12,9 +12,14 @@ import time
 
 from utils.logger import get_logger
 from utils.config import Config
+from utils.exceptions import OptimizationError
 
 
 logger = get_logger(__name__)
+
+
+def _escape_applescript_string(s: str) -> str:
+    return s.replace('\\', '\\\\').replace('"', '\\"')
 
 
 @dataclass
@@ -102,7 +107,7 @@ class SystemOptimizer:
             try:
                 memory_freed = self.purge_inactive_memory()
                 result.memory_freed = memory_freed
-            except Exception as e:
+            except (OptimizationError, subprocess.CalledProcessError, OSError, Exception) as e:
                 logger.error(f"Failed to purge memory: {e}")
                 result.errors.append(f"Memory optimization failed: {str(e)}")
 
@@ -111,7 +116,7 @@ class SystemOptimizer:
             try:
                 if self.flush_dns_cache():
                     result.dns_cache_flushed = True
-            except Exception as e:
+            except (OptimizationError, subprocess.CalledProcessError, OSError) as e:
                 logger.error(f"Failed to flush DNS: {e}")
                 result.errors.append(f"DNS flush failed: {str(e)}")
 
@@ -120,7 +125,7 @@ class SystemOptimizer:
             try:
                 if self.rebuild_spotlight_index():
                     result.spotlight_reindexed = True
-            except Exception as e:
+            except (OptimizationError, subprocess.CalledProcessError, OSError) as e:
                 logger.error(f"Failed to rebuild Spotlight: {e}")
                 result.errors.append(f"Spotlight rebuild failed: {str(e)}")
 
@@ -156,7 +161,7 @@ class SystemOptimizer:
                     item = self._parse_launch_plist(plist_file, location_type)
                     if item:
                         items.append(item)
-                except Exception as e:
+                except (OSError, IOError, plistlib.InvalidFileException) as e:
                     logger.debug(f"Error parsing {plist_file}: {e}")
 
         except PermissionError:
@@ -189,7 +194,8 @@ class SystemOptimizer:
             # Create description
             description = self._get_service_description(name, plist_data)
 
-            item_type = 'LaunchDaemon' if 'Daemons' in str(plist_path) else 'LaunchAgent'
+            # Determine type based on location_type
+            item_type = 'LaunchDaemon' if 'daemons' in location_type.lower() else 'LaunchAgent'
 
             return StartupItem(
                 name=name,
@@ -201,8 +207,11 @@ class SystemOptimizer:
                 location=plist_path
             )
 
-        except Exception as e:
+        except (OSError, IOError, plistlib.InvalidFileException) as e:
             logger.debug(f"Error parsing plist {plist_path}: {e}")
+            return None
+        except KeyError as e:
+            logger.debug(f"Missing required key in plist {plist_path}: {e}")
             return None
 
     def _get_login_items(self) -> List[StartupItem]:
@@ -285,7 +294,7 @@ class SystemOptimizer:
             else:
                 return self._disable_launch_item(item)
 
-        except Exception as e:
+        except (OSError, IOError, subprocess.CalledProcessError) as e:
             logger.error(f"Failed to disable {item.name}: {e}")
             return False
 
@@ -297,7 +306,7 @@ class SystemOptimizer:
             else:
                 return self._enable_launch_item(item)
 
-        except Exception as e:
+        except (OSError, IOError, subprocess.CalledProcessError) as e:
             logger.error(f"Failed to enable {item.name}: {e}")
             return False
 
@@ -362,16 +371,12 @@ class SystemOptimizer:
             return False
 
     def _disable_login_item(self, item: StartupItem) -> bool:
-        """Disable a login item."""
         if self.dry_run:
             logger.info(f"[DRY RUN] Would remove login item: {item.name}")
             return True
 
-        script = f'''
-        tell application "System Events"
-            delete login item "{item.name}"
-        end tell
-        '''
+        safe_name = _escape_applescript_string(item.name)
+        script = f'tell application "System Events" to delete login item "{safe_name}"'
 
         try:
             subprocess.run(
@@ -386,7 +391,6 @@ class SystemOptimizer:
             return False
 
     def _enable_login_item(self, item: StartupItem) -> bool:
-        """Enable/add a login item."""
         if self.dry_run:
             logger.info(f"[DRY RUN] Would add login item: {item.name}")
             return True
@@ -395,11 +399,8 @@ class SystemOptimizer:
             logger.error(f"Application not found: {item.path}")
             return False
 
-        script = f'''
-        tell application "System Events"
-            make login item at end with properties {{path:"{item.path}", hidden:false}}
-        end tell
-        '''
+        safe_path = _escape_applescript_string(str(item.path))
+        script = f'tell application "System Events" to make login item at end with properties {{path:"{safe_path}", hidden:false}}'
 
         try:
             subprocess.run(
@@ -524,6 +525,6 @@ class SystemOptimizer:
                 logger.warning(f"Disk verification found issues: {result.stdout}")
                 return False, errors
 
-        except Exception as e:
+        except (subprocess.CalledProcessError, OSError, IOError) as e:
             logger.error(f"Failed to verify disk: {e}")
             return False, [str(e)]

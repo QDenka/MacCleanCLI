@@ -24,6 +24,12 @@ class FileCategory(Enum):
     APP_LEFTOVERS = auto()
     MEMORY = auto()
     STARTUP_ITEMS = auto()
+    XCODE_DERIVED_DATA = auto()
+    XCODE_ARCHIVES = auto()
+    DOCKER_DATA = auto()
+    HOMEBREW_CACHE = auto()
+    NODE_MODULES = auto()
+    PYTHON_CACHE = auto()
 
 
 class CleaningPriority(Enum):

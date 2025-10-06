@@ -17,6 +17,7 @@ from models.scan_result import (
 from utils.logger import get_logger
 from utils.config import Config
 from utils.backup import BackupManager
+from utils.exceptions import CleaningError, ProtectedPathError, InsufficientPermissionsError
 
 logger = get_logger(__name__)
 
@@ -118,8 +119,10 @@ class SystemCleaner:
                                 f"Cleaned {processed_files}/{total_files} files"
                             )
 
-                    except Exception as e:
+                    except (CleaningError, OSError, IOError) as e:
                         logger.error(f"Error in cleaning task: {e}")
+                    except PermissionError as e:
+                        logger.warning(f"Permission denied in cleaning task: {e}")
 
         cleaning_result.finish()
 
@@ -194,12 +197,17 @@ class SystemCleaner:
             result.add_deleted_file(file_path, file_info.size)
             return True
 
-        except PermissionError as e:
+        except (PermissionError, InsufficientPermissionsError):
             error_msg = f"Permission denied: {file_path}"
             logger.error(error_msg)
             result.add_failed_file(file_path, error_msg)
 
-        except Exception as e:
+        except FileNotFoundError:
+            error_msg = f"File not found: {file_path}"
+            logger.debug(error_msg)
+            result.add_failed_file(file_path, error_msg)
+
+        except (OSError, IOError) as e:
             error_msg = f"Failed to delete {file_path}: {str(e)}"
             logger.error(error_msg)
             result.add_failed_file(file_path, error_msg)
@@ -233,7 +241,7 @@ class SystemCleaner:
             # Verify we have write permission
             if not os.access(path.parent, os.W_OK):
                 return False
-        except Exception:
+        except (OSError, IOError):
             return False
 
         return True
@@ -254,8 +262,10 @@ class SystemCleaner:
                     directory.rmdir()
                 logger.debug(f"Removed empty directory: {directory}")
                 return True
-        except Exception as e:
+        except (OSError, IOError) as e:
             logger.debug(f"Could not remove directory {directory}: {e}")
+        except PermissionError as e:
+            logger.warning(f"Permission denied removing directory {directory}: {e}")
 
         return False
 
@@ -289,14 +299,22 @@ class SystemCleaner:
                         )
                         trash_size += dir_size
                         trash_files.append(item)
-                except Exception:
+                except (OSError, IOError):
+                    logger.debug(f"Could not process trash item {item}")
                     continue
 
             # Empty trash
             if not self.dry_run:
-                # Use system command for proper trash emptying
-                import subprocess
-                subprocess.run(['rm', '-rf', str(trash_path / "*")], shell=False, check=False)
+                for item in trash_path.iterdir():
+                    try:
+                        if item.is_file():
+                            item.unlink()
+                        elif item.is_dir():
+                            shutil.rmtree(item)
+                    except PermissionError as e:
+                        logger.warning(f"Permission denied deleting {item}: {e}")
+                    except (OSError, IOError) as e:
+                        logger.debug(f"Failed to delete {item}: {e}")
 
             # Record results
             for item in trash_files:
@@ -304,8 +322,11 @@ class SystemCleaner:
 
             result.space_freed = trash_size
 
-        except Exception as e:
+        except (OSError, IOError) as e:
             logger.error(f"Failed to empty trash: {e}")
+            result.add_failed_file(trash_path, str(e))
+        except PermissionError as e:
+            logger.error(f"Permission denied emptying trash: {e}")
             result.add_failed_file(trash_path, str(e))
 
         result.finish()
@@ -348,7 +369,7 @@ class SystemCleaner:
                     verification['verified_deleted'] += 1
                 else:
                     verification['still_exists'].append(str(file_path))
-            except Exception as e:
+            except (OSError, IOError) as e:
                 verification['verification_errors'].append(
                     f"{file_path}: {str(e)}"
                 )

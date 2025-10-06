@@ -178,6 +178,12 @@ class CleanerInterface:
             (FileCategory.LARGE_FILES, "Large Files", "📦"),
             (FileCategory.OLD_FILES, "Old Files", "📅"),
             (FileCategory.APP_LEFTOVERS, "App Leftovers", "📱"),
+            (FileCategory.XCODE_DERIVED_DATA, "Xcode Derived Data", "🔨"),
+            (FileCategory.XCODE_ARCHIVES, "Xcode Archives", "🏗️"),
+            (FileCategory.DOCKER_DATA, "Docker Data", "🐳"),
+            (FileCategory.HOMEBREW_CACHE, "Homebrew Cache", "🍺"),
+            (FileCategory.NODE_MODULES, "Node Modules", "🟢"),
+            (FileCategory.PYTHON_CACHE, "Python Cache", "🐍"),
         ]
 
         for i, (cat, name, icon) in enumerate(categories, 1):
@@ -235,37 +241,64 @@ class CleanerInterface:
         console.print(create_scan_results_table(self.scan_result))
 
         # Show details for each category
-        if Confirm.ask("\n[cyan]Show detailed results?[/cyan]", default=False):
+        if Confirm.ask("\n[cyan]Show detailed file list before cleaning?[/cyan]", default=True):
             for category, result in self.scan_result.categories.items():
                 if result.file_count > 0:
                     console.print(create_category_panel(category, result))
 
-                    if result.file_count > 5 and Confirm.ask(
-                        f"[cyan]Show all {result.file_count} files?[/cyan]",
-                        default=False
-                    ):
-                        self._show_file_list(result.files)
+                    if result.file_count > 0:
+                        self._show_file_list(category, result.files)
 
-    def _show_file_list(self, files):
-        """Show detailed file list."""
-        table = Table(title="File Details", box=box.ROUNDED)
-        table.add_column("Path", style="cyan", no_wrap=True)
-        table.add_column("Size", justify="right")
-        table.add_column("Age", justify="right")
-        table.add_column("Safe", justify="center")
+    def _show_file_list(self, category: FileCategory, files):
+        """Show detailed file list with pagination."""
+        if not files:
+            return
 
-        for file_info in files[:50]:  # Limit to 50 files
-            table.add_row(
-                str(file_info.path),
-                format_size(file_info.size),
-                f"{file_info.age_days}d",
-                "✅" if file_info.is_safe_to_delete else "⚠️"
+        # Show files in batches
+        batch_size = 20
+        total = len(files)
+        start_idx = 0
+
+        while start_idx < total:
+            end_idx = min(start_idx + batch_size, total)
+            batch = files[start_idx:end_idx]
+
+            table = Table(
+                title=f"Files to Delete ({start_idx + 1}-{end_idx} of {total})",
+                box=box.ROUNDED,
+                show_header=True,
+                header_style="bold cyan"
             )
+            table.add_column("Path", style="cyan")
+            table.add_column("Size", justify="right", style="yellow")
+            table.add_column("Age", justify="right", style="blue")
+            table.add_column("Safe", justify="center")
 
-        if len(files) > 50:
-            table.add_row("...", "...", "...", "...")
+            home = str(Path.home())
+            for file_info in batch:
+                # Shorten path relative to home
+                path_str = str(file_info.path)
+                if path_str.startswith(home):
+                    path_str = "~" + path_str[len(home):]
 
-        console.print(table)
+                table.add_row(
+                    path_str,
+                    format_size(file_info.size),
+                    f"{file_info.age_days}d",
+                    "✅" if file_info.is_safe_to_delete else "⚠️"
+                )
+
+            console.print(table)
+
+            # Ask to continue if more files
+            start_idx = end_idx
+            if start_idx < total:
+                if not Confirm.ask(
+                    f"\n[cyan]Show next {min(batch_size, total - start_idx)} files?[/cyan]",
+                    default=True
+                ):
+                    break
+                console.print()
 
     def _select_categories_to_clean(self) -> Set[FileCategory]:
         """Let user select which categories to clean."""
