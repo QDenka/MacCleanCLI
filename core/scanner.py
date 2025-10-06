@@ -554,10 +554,10 @@ class SystemScanner:
                                     accessed_time=datetime.fromtimestamp(stat.st_atime),
                                     category=FileCategory.LARGE_FILES,
                                     priority=CleaningPriority.OPTIONAL,
-                                is_safe_to_delete=True,
-                                description=f"Large file ({stat.st_size / (1024**3):.1f} GB)"
-                            )
-                            result.add_file(file_info)
+                                    is_safe_to_delete=True,
+                                    description=f"Large file ({stat.st_size / (1024**3):.1f} GB)"
+                                )
+                                result.add_file(file_info)
                         except (OSError, PermissionError):
                             continue
             except (PermissionError, OSError):
