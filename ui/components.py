@@ -314,6 +314,12 @@ def get_category_display_name(category: FileCategory) -> str:
         FileCategory.APP_LEFTOVERS: "📱 App Leftovers",
         FileCategory.MEMORY: "💾 Memory",
         FileCategory.STARTUP_ITEMS: "🚀 Startup Items",
+        FileCategory.XCODE_DERIVED_DATA: "🔨 Xcode Derived Data",
+        FileCategory.XCODE_ARCHIVES: "🏗️  Xcode Archives",
+        FileCategory.DOCKER_DATA: "🐳 Docker Data",
+        FileCategory.HOMEBREW_CACHE: "🍺 Homebrew Cache",
+        FileCategory.NODE_MODULES: "🟢 Node Modules",
+        FileCategory.PYTHON_CACHE: "🐍 Python Cache",
     }
 
     return display_names.get(category, category.name)

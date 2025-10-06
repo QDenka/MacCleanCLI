@@ -3,7 +3,6 @@ System scanner module for identifying files to clean
 """
 
 import os
-import os
 import time
 import hashlib
 import subprocess
@@ -18,6 +17,7 @@ from models.scan_result import (
 )
 from utils.logger import get_logger
 from utils.config import Config
+from utils.exceptions import ScanError, InsufficientPermissionsError
 
 
 logger = get_logger(__name__)
@@ -30,6 +30,7 @@ class SystemScanner:
         self.config = config
         self.home_path = Path.home()
         self.library_path = self.home_path / "Library"
+        self._stat_cache: Dict[Path, os.stat_result] = {}
 
         # Define scan paths for each category
         self.scan_paths = {
@@ -86,6 +87,28 @@ class SystemScanner:
                 self.library_path / "Preferences",
                 self.library_path / "Saved Application State",
             ],
+            FileCategory.XCODE_DERIVED_DATA: [
+                self.library_path / "Developer" / "Xcode" / "DerivedData",
+            ],
+            FileCategory.XCODE_ARCHIVES: [
+                self.library_path / "Developer" / "Xcode" / "Archives",
+                self.library_path / "Developer" / "Xcode" / "iOS DeviceSupport",
+            ],
+            FileCategory.DOCKER_DATA: [
+                self.home_path / ".docker",
+                self.library_path / "Containers" / "com.docker.docker",
+            ],
+            FileCategory.HOMEBREW_CACHE: [
+                self.library_path / "Caches" / "Homebrew",
+                Path("/usr/local/Homebrew/Library/Homebrew/vendor/cache"),
+            ],
+            FileCategory.NODE_MODULES: [
+                self.home_path / "node_modules",
+            ],
+            FileCategory.PYTHON_CACHE: [
+                self.home_path / ".cache" / "pip",
+                self.library_path / "Caches" / "pip",
+            ],
         }
 
         # File extensions to consider for cleaning
@@ -118,6 +141,11 @@ class SystemScanner:
         # Return only installed browsers
         return {name: path for name, path in browsers.items() if path.exists()}
 
+    def _get_stat(self, path: Path) -> os.stat_result:
+        if path not in self._stat_cache:
+            self._stat_cache[path] = path.stat()
+        return self._stat_cache[path]
+
     def scan(self, categories: Optional[List[FileCategory]] = None) -> ScanResult:
         """
         Scan system for cleanable files.
@@ -135,6 +163,7 @@ class SystemScanner:
             categories = list(FileCategory)
 
         logger.info(f"Starting system scan for {len(categories)} categories")
+        self._stat_cache.clear()
 
         # Scan each category
         for category in categories:
@@ -142,7 +171,7 @@ class SystemScanner:
                 try:
                     category_result = self._scan_category(category)
                     result.add_category_result(category_result)
-                except Exception as e:
+                except (ScanError, OSError, IOError) as e:
                     logger.error(f"Error scanning {category.name}: {e}")
                     result.errors.append(f"Failed to scan {category.name}: {str(e)}")
 
@@ -151,7 +180,7 @@ class SystemScanner:
             try:
                 duplicates_result = self._scan_duplicates()
                 result.add_category_result(duplicates_result)
-            except Exception as e:
+            except (ScanError, OSError, IOError) as e:
                 logger.error(f"Error scanning duplicates: {e}")
                 result.errors.append(f"Failed to scan duplicates: {str(e)}")
 
@@ -160,7 +189,7 @@ class SystemScanner:
             try:
                 large_files_result = self._scan_large_files()
                 result.add_category_result(large_files_result)
-            except Exception as e:
+            except (ScanError, OSError, IOError) as e:
                 logger.error(f"Error scanning large files: {e}")
                 result.errors.append(f"Failed to scan large files: {str(e)}")
 
@@ -169,7 +198,7 @@ class SystemScanner:
             try:
                 old_files_result = self._scan_old_files()
                 result.add_category_result(old_files_result)
-            except Exception as e:
+            except (ScanError, OSError, IOError) as e:
                 logger.error(f"Error scanning old files: {e}")
                 result.errors.append(f"Failed to scan old files: {str(e)}")
 
@@ -211,10 +240,12 @@ class SystemScanner:
                             if file_info:
                                 result.add_file(file_info)
                                 scanned_paths.append(path.name)
-            except PermissionError:
+            except (PermissionError, InsufficientPermissionsError) as e:
                 logger.warning(f"Permission denied: {scan_path}")
-            except Exception as e:
+            except (OSError, IOError) as e:
                 logger.error(f"Error scanning {scan_path}: {e}")
+            except FileNotFoundError:
+                logger.debug(f"File not found during scan: {scan_path}")
 
         # Update description with scanned browsers for browser cache
         if category == FileCategory.BROWSER_CACHE and scanned_paths:
@@ -252,32 +283,47 @@ class SystemScanner:
             # Special handling for Firefox profiles
             if 'Firefox' in str(directory) and directory.name == 'Profiles':
                 # Scan each profile directory
-                for profile_dir in directory.iterdir():
-                    if profile_dir.is_dir() and not profile_dir.name.startswith('.'):
-                        # Look for cache directories in Firefox profiles
-                        cache_dirs = ['cache2', 'startupCache', 'shader-cache']
-                        for cache_name in cache_dirs:
-                            cache_path = profile_dir / cache_name
-                            if cache_path.exists() and cache_path.is_dir():
-                                self._scan_directory(cache_path, category, result, max_depth - 1)
+                with os.scandir(directory) as entries:
+                    for entry in entries:
+                        if entry.is_dir() and not entry.name.startswith('.'):
+                            # Look for cache directories in Firefox profiles
+                            cache_dirs = ['cache2', 'startupCache', 'shader-cache']
+                            for cache_name in cache_dirs:
+                                cache_path = Path(entry.path) / cache_name
+                                if cache_path.exists() and cache_path.is_dir():
+                                    self._scan_directory(cache_path, category, result, max_depth - 1)
                 return
 
-            for item in directory.iterdir():
-                try:
-                    if item.is_dir() and not item.is_symlink():
-                        # Skip certain system directories
-                        if item.name.startswith('.') and category != FileCategory.USER_CACHE:
+            subdirs = []
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    try:
+                        if entry.is_dir(follow_symlinks=False):
+                            # Skip certain system directories
+                            if entry.name.startswith('.') and category != FileCategory.USER_CACHE:
+                                continue
+                            subdirs.append(Path(entry.path))
+
+                        elif entry.is_file():
+                            file_info = self._analyze_file(Path(entry.path), category)
+                            if file_info:
+                                result.add_file(file_info)
+
+                    except (PermissionError, OSError):
+                        continue
+
+            # Parallel scanning of subdirectories
+            if subdirs and max_depth > 1:
+                with ThreadPoolExecutor(max_workers=self.config.max_workers) as executor:
+                    futures = [
+                        executor.submit(self._scan_directory, subdir, category, result, max_depth - 1)
+                        for subdir in subdirs
+                    ]
+                    for future in as_completed(futures):
+                        try:
+                            future.result()
+                        except (ScanError, OSError, IOError):
                             continue
-
-                        self._scan_directory(item, category, result, max_depth - 1)
-
-                    elif item.is_file():
-                        file_info = self._analyze_file(item, category)
-                        if file_info:
-                            result.add_file(file_info)
-
-                except (PermissionError, OSError):
-                    continue
 
         except (PermissionError, OSError):
             logger.warning(f"Cannot access directory: {directory}")
@@ -285,7 +331,7 @@ class SystemScanner:
     def _analyze_file(self, file_path: Path, category: FileCategory) -> Optional[FileInfo]:
         """Analyze a file and determine if it should be cleaned."""
         try:
-            stat = file_path.stat()
+            stat = self._get_stat(file_path)
 
             # Skip very small files
             if stat.st_size < 1024:  # 1KB
@@ -324,7 +370,7 @@ class SystemScanner:
 
         if category == FileCategory.DOWNLOADS:
             # Only old downloads
-            stat = file_path.stat()
+            stat = self._get_stat(file_path)
             age = datetime.now() - datetime.fromtimestamp(stat.st_mtime)
             return age > timedelta(days=30)
 
@@ -334,6 +380,21 @@ class SystemScanner:
         if category == FileCategory.APP_LEFTOVERS:
             # Check if app still exists
             return not self._is_app_installed(file_path)
+
+        if category in [FileCategory.XCODE_DERIVED_DATA, FileCategory.XCODE_ARCHIVES]:
+            return True
+
+        if category == FileCategory.DOCKER_DATA:
+            return True
+
+        if category == FileCategory.HOMEBREW_CACHE:
+            return True
+
+        if category == FileCategory.NODE_MODULES:
+            return file_path.name == "node_modules"
+
+        if category == FileCategory.PYTHON_CACHE:
+            return file_path.name in ["__pycache__", "pip"] or file_path.suffix == ".pyc"
 
         return False
 
@@ -351,7 +412,7 @@ class SystemScanner:
         # Category-specific safety rules
         if category == FileCategory.SYSTEM_CACHE:
             # Only caches older than 7 days
-            stat = file_path.stat()
+            stat = self._get_stat(file_path)
             age = datetime.now() - datetime.fromtimestamp(stat.st_atime)
             return age > timedelta(days=7)
 
@@ -373,23 +434,33 @@ class SystemScanner:
             self.home_path / "Desktop",
         ]
 
-        file_hashes: Dict[str, List[Path]] = {}
-
+        # Group files by size first (fast)
+        files_by_size: Dict[int, List[Path]] = {}
         for directory in scan_dirs:
             if not directory.exists():
                 continue
+            self._group_files_by_size(directory, files_by_size)
 
-            self._find_duplicates_in_directory(directory, file_hashes)
+        # Hash only files with same size
+        file_hashes: Dict[str, List[Path]] = {}
+        for size, paths in files_by_size.items():
+            if len(paths) > 1:
+                for path in paths:
+                    file_hash = self._get_file_hash(path)
+                    if file_hash:
+                        if file_hash not in file_hashes:
+                            file_hashes[file_hash] = []
+                        file_hashes[file_hash].append(path)
 
         # Process duplicates
         for file_hash, paths in file_hashes.items():
             if len(paths) > 1:
                 # Keep the oldest file, mark others as duplicates
-                paths.sort(key=lambda p: p.stat().st_mtime)
+                paths.sort(key=lambda p: self._get_stat(p).st_mtime)
 
                 for path in paths[1:]:
                     try:
-                        stat = path.stat()
+                        stat = self._get_stat(path)
                         file_info = FileInfo(
                             path=path,
                             size=stat.st_size,
@@ -406,28 +477,44 @@ class SystemScanner:
 
         return result
 
-    def _find_duplicates_in_directory(self, directory: Path,
-                                    file_hashes: Dict[str, List[Path]]):
-        """Find duplicate files in a directory."""
+    def _group_files_by_size(self, directory: Path, files_by_size: Dict[int, List[Path]]):
+        """Group files by size for faster duplicate detection."""
         try:
             for item in directory.rglob("*"):
-                if item.is_file() and item.stat().st_size > 1024 * 100:  # > 100KB
-                    file_hash = self._get_file_hash(item)
-                    if file_hash:
-                        if file_hash not in file_hashes:
-                            file_hashes[file_hash] = []
-                        file_hashes[file_hash].append(item)
+                if item.is_file():
+                    try:
+                        size = self._get_stat(item).st_size
+                        if size > 1024 * 100:  # > 100KB
+                            if size not in files_by_size:
+                                files_by_size[size] = []
+                            files_by_size[size].append(item)
+                    except (OSError, PermissionError):
+                        continue
         except (PermissionError, OSError):
             pass
 
     def _get_file_hash(self, file_path: Path) -> Optional[str]:
-        """Calculate file hash for duplicate detection."""
+        """Calculate file hash using partial hashing for large files."""
         try:
+            file_size = self._get_stat(file_path).st_size
             hasher = hashlib.md5()
+
             with open(file_path, 'rb') as f:
-                # Read file in chunks to handle large files
-                for chunk in iter(lambda: f.read(4096), b''):
-                    hasher.update(chunk)
+                # For small files (< 1MB), hash entire file
+                if file_size < 1024 * 1024:
+                    hasher.update(f.read())
+                else:
+                    # For large files, hash first 8KB + last 8KB + size
+                    chunk_size = 8192
+                    hasher.update(f.read(chunk_size))
+
+                    # Seek to end - chunk_size
+                    f.seek(max(0, file_size - chunk_size))
+                    hasher.update(f.read(chunk_size))
+
+                    # Add size to hash to differentiate files
+                    hasher.update(str(file_size).encode())
+
             return hasher.hexdigest()
         except (OSError, PermissionError):
             return None
@@ -457,19 +544,22 @@ class SystemScanner:
             try:
                 for item in directory.rglob("*"):
                     if item.is_file():
-                        stat = item.stat()
-                        if stat.st_size >= min_size:
-                            file_info = FileInfo(
-                                path=item,
-                                size=stat.st_size,
-                                modified_time=datetime.fromtimestamp(stat.st_mtime),
-                                accessed_time=datetime.fromtimestamp(stat.st_atime),
-                                category=FileCategory.LARGE_FILES,
-                                priority=CleaningPriority.OPTIONAL,
-                                is_safe_to_delete=True,
-                                description=f"Large file ({stat.st_size / (1024**3):.1f} GB)"
-                            )
-                            result.add_file(file_info)
+                        try:
+                            stat = self._get_stat(item)
+                            if stat.st_size >= min_size:
+                                file_info = FileInfo(
+                                    path=item,
+                                    size=stat.st_size,
+                                    modified_time=datetime.fromtimestamp(stat.st_mtime),
+                                    accessed_time=datetime.fromtimestamp(stat.st_atime),
+                                    category=FileCategory.LARGE_FILES,
+                                    priority=CleaningPriority.OPTIONAL,
+                                    is_safe_to_delete=True,
+                                    description=f"Large file ({stat.st_size / (1024**3):.1f} GB)"
+                                )
+                                result.add_file(file_info)
+                        except (OSError, PermissionError):
+                            continue
             except (PermissionError, OSError):
                 continue
 
@@ -498,21 +588,24 @@ class SystemScanner:
             try:
                 for item in directory.rglob("*"):
                     if item.is_file():
-                        stat = item.stat()
-                        age = datetime.now() - datetime.fromtimestamp(stat.st_atime)
+                        try:
+                            stat = self._get_stat(item)
+                            age = datetime.now() - datetime.fromtimestamp(stat.st_atime)
 
-                        if age > max_age:
-                            file_info = FileInfo(
-                                path=item,
-                                size=stat.st_size,
-                                modified_time=datetime.fromtimestamp(stat.st_mtime),
-                                accessed_time=datetime.fromtimestamp(stat.st_atime),
-                                category=FileCategory.OLD_FILES,
-                                priority=CleaningPriority.OPTIONAL,
-                                is_safe_to_delete=True,
-                                description=f"Not accessed for {age.days} days"
-                            )
-                            result.add_file(file_info)
+                            if age > max_age:
+                                file_info = FileInfo(
+                                    path=item,
+                                    size=stat.st_size,
+                                    modified_time=datetime.fromtimestamp(stat.st_mtime),
+                                    accessed_time=datetime.fromtimestamp(stat.st_atime),
+                                    category=FileCategory.OLD_FILES,
+                                    priority=CleaningPriority.OPTIONAL,
+                                    is_safe_to_delete=True,
+                                    description=f"Not accessed for {age.days} days"
+                                )
+                                result.add_file(file_info)
+                        except (OSError, PermissionError):
+                            continue
             except (PermissionError, OSError):
                 continue
 
@@ -559,6 +652,12 @@ class SystemScanner:
             FileCategory.DUPLICATES: CleaningPriority.LOW,
             FileCategory.LARGE_FILES: CleaningPriority.OPTIONAL,
             FileCategory.OLD_FILES: CleaningPriority.OPTIONAL,
+            FileCategory.XCODE_DERIVED_DATA: CleaningPriority.HIGH,
+            FileCategory.XCODE_ARCHIVES: CleaningPriority.LOW,
+            FileCategory.DOCKER_DATA: CleaningPriority.MEDIUM,
+            FileCategory.HOMEBREW_CACHE: CleaningPriority.MEDIUM,
+            FileCategory.NODE_MODULES: CleaningPriority.LOW,
+            FileCategory.PYTHON_CACHE: CleaningPriority.MEDIUM,
         }
         return priority_map.get(category, CleaningPriority.MEDIUM)
 
@@ -576,6 +675,12 @@ class SystemScanner:
             FileCategory.DUPLICATES: "Duplicate files taking up extra space",
             FileCategory.LARGE_FILES: "Large files that might be unnecessary",
             FileCategory.OLD_FILES: "Files not accessed in a long time",
+            FileCategory.XCODE_DERIVED_DATA: "Xcode build artifacts and derived data",
+            FileCategory.XCODE_ARCHIVES: "Xcode archives and device support files",
+            FileCategory.DOCKER_DATA: "Docker images, containers, and volumes",
+            FileCategory.HOMEBREW_CACHE: "Homebrew package manager cache",
+            FileCategory.NODE_MODULES: "Node.js dependencies in node_modules",
+            FileCategory.PYTHON_CACHE: "Python package cache and compiled bytecode",
         }
         return descriptions.get(category, "")
 

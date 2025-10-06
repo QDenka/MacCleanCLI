@@ -18,7 +18,7 @@ from core.scanner import SystemScanner
 from core.cleaner import SystemCleaner
 from core.optimizer import SystemOptimizer
 from utils.logger import setup_logger
-from utils.config import Config
+from utils.config import load_config
 
 console = Console()
 logger = setup_logger(__name__)
@@ -89,7 +89,7 @@ def main():
         args = parse_arguments()
 
         # Load configuration
-        config = Config(args.config)
+        config = load_config(args.config)
 
         # Display welcome message
         if not args.auto:

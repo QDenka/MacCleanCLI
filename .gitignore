@@ -177,3 +177,7 @@ backups/
 *.tmp
 *.temp
 config.json
+
+# Development
+CLAUDE.md
+coverage.json

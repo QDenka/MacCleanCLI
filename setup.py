@@ -36,6 +36,7 @@ setup(
         "Topic :: Utilities",
     ],
     packages=find_packages(),
+    py_modules=['main'],
     python_requires=">=3.10",
     install_requires=[
         "rich>=13.7.0",
