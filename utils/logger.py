@@ -10,7 +10,8 @@ from typing import Optional
 
 
 def setup_logger(name: str, log_file: Optional[Path] = None,
-                 level: int = logging.INFO) -> logging.Logger:
+                 level: int = logging.INFO,
+                 console_level: int = logging.WARNING) -> logging.Logger:
     """
     Set up a logger with console and optional file output.
 
@@ -30,7 +31,7 @@ def setup_logger(name: str, log_file: Optional[Path] = None,
 
     # Console handler with simple format for user-friendly output
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.WARNING)  # Only show warnings and errors in console
+    console_handler.setLevel(console_level)
     console_format = logging.Formatter('%(levelname)s: %(message)s')
     console_handler.setFormatter(console_format)
     logger.addHandler(console_handler)
@@ -53,6 +54,28 @@ def setup_logger(name: str, log_file: Optional[Path] = None,
 def get_logger(name: str) -> logging.Logger:
     """Get a logger by name."""
     return logging.getLogger(name)
+
+
+def configure_logging(verbose: bool = False) -> None:
+    """Configure logging behavior for CLI runtime."""
+    target_level = logging.DEBUG if verbose else logging.INFO
+    console_level = logging.INFO if verbose else logging.WARNING
+
+    # Root logger
+    root = logging.getLogger()
+    root.setLevel(target_level)
+    for handler in root.handlers:
+        if isinstance(handler, logging.StreamHandler):
+            handler.setLevel(console_level)
+
+    # Already-instantiated named loggers
+    for logger_obj in logging.Logger.manager.loggerDict.values():
+        if not isinstance(logger_obj, logging.Logger):
+            continue
+        logger_obj.setLevel(target_level)
+        for handler in logger_obj.handlers:
+            if isinstance(handler, logging.StreamHandler):
+                handler.setLevel(console_level)
 
 
 # Default log directory

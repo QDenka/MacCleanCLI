@@ -17,7 +17,7 @@ from ui.interface import CleanerInterface
 from core.scanner import SystemScanner
 from core.cleaner import SystemCleaner
 from core.optimizer import SystemOptimizer
-from utils.logger import setup_logger
+from utils.logger import setup_logger, configure_logging
 from utils.config import load_config
 
 console = Console()
@@ -57,6 +57,12 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview cleaning without deleting files"
+    )
+
+    parser.add_argument(
         "--version",
         action="version",
         version="%(prog)s 1.0.0"
@@ -88,8 +94,15 @@ def main():
         # Parse arguments
         args = parse_arguments()
 
+        # Configure runtime logging first
+        configure_logging(verbose=args.verbose)
+
         # Load configuration
         config = load_config(args.config)
+
+        # CLI overrides
+        if args.dry_run:
+            config.dry_run = True
 
         # Display welcome message
         if not args.auto:
