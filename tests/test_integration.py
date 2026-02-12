@@ -38,7 +38,8 @@ class TestScannerCleanerIntegration:
         return Config(
             dry_run=True,
             enable_backup=False,
-            max_workers=2
+            max_workers=2,
+            min_file_size_mb=0.001
         )
 
     @pytest.fixture
@@ -46,7 +47,8 @@ class TestScannerCleanerIntegration:
         return Config(
             dry_run=False,
             enable_backup=False,
-            max_workers=2
+            max_workers=2,
+            min_file_size_mb=0.001
         )
 
     def test_scan_then_clean_dry_run(self, config_dry_run, temp_workspace, monkeypatch):
@@ -134,7 +136,7 @@ class TestScannerCleanerIntegration:
         assert cleaning_result.space_freed == 0
 
     def test_config_changes_between_scan_clean(self, temp_workspace, monkeypatch):
-        config_scan = Config(dry_run=True, max_workers=2)
+        config_scan = Config(dry_run=True, max_workers=2, min_file_size_mb=0.001)
         scanner = SystemScanner(config_scan)
         scanner.scan_paths = {
             FileCategory.USER_CACHE: [temp_workspace / "Caches"]
@@ -142,7 +144,7 @@ class TestScannerCleanerIntegration:
 
         scan_result = scanner.scan([FileCategory.USER_CACHE])
 
-        config_clean = Config(dry_run=False, max_workers=4)
+        config_clean = Config(dry_run=False, max_workers=4, min_file_size_mb=0.001)
         cleaner = SystemCleaner(config_clean)
         cleaning_result = cleaner.clean(scan_result)
 
@@ -199,7 +201,8 @@ class TestBackupIntegration:
             dry_run=False,
             enable_backup=True,
             backup_dir=temp_workspace / "backups",
-            max_workers=2
+            max_workers=2,
+            min_file_size_mb=0.001
         )
 
         scanner = SystemScanner(config)
@@ -234,7 +237,7 @@ class TestErrorHandlingIntegration:
             shutil.rmtree(workspace)
 
     def test_scan_with_permission_errors(self, temp_workspace, monkeypatch):
-        config = Config(dry_run=True, max_workers=2)
+        config = Config(dry_run=True, max_workers=2, min_file_size_mb=0.001)
         scanner = SystemScanner(config)
         scanner.scan_paths = {
             FileCategory.USER_CACHE: [
@@ -248,7 +251,7 @@ class TestErrorHandlingIntegration:
         assert len(scan_result.errors) >= 0
 
     def test_clean_with_missing_files(self, temp_workspace, monkeypatch):
-        config = Config(dry_run=False, max_workers=2)
+        config = Config(dry_run=False, max_workers=2, min_file_size_mb=0.001)
         scanner = SystemScanner(config)
         scanner.scan_paths = {
             FileCategory.USER_CACHE: [temp_workspace / "files"]
@@ -283,7 +286,7 @@ class TestPerformanceIntegration:
             shutil.rmtree(workspace)
 
     def test_parallel_scanning_performance(self, large_workspace, monkeypatch):
-        config = Config(dry_run=True, max_workers=4)
+        config = Config(dry_run=True, max_workers=4, min_file_size_mb=0.001)
         scanner = SystemScanner(config)
         scanner.scan_paths = {
             FileCategory.USER_CACHE: [large_workspace / "Caches"]
@@ -298,7 +301,7 @@ class TestPerformanceIntegration:
         assert duration < 10
 
     def test_parallel_cleaning_performance(self, large_workspace, monkeypatch):
-        config = Config(dry_run=False, max_workers=4)
+        config = Config(dry_run=False, max_workers=4, min_file_size_mb=0.001)
         scanner = SystemScanner(config)
         scanner.scan_paths = {
             FileCategory.USER_CACHE: [large_workspace / "Caches"]
