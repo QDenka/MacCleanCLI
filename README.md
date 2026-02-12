@@ -219,7 +219,7 @@ Continue to next page? [Y/n]:
 ## ⚙️ Configuration
 
 ### Config File Location
-`~/.MacCleanCLI/config.json`
+`~/.macos-cleaner/config.json`
 
 ### Default Configuration
 

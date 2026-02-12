@@ -230,7 +230,7 @@ macos-cleaner --dry-run
 **3. Check Protected Paths:**
 ```bash
 # View protected paths in config
-cat ~/.MacCleanCLI/config.json | jq '.protected_directories'
+cat ~/.macos-cleaner/config.json | jq '.protected_directories'
 
 # Files in protected paths are never deleted
 ```
@@ -305,7 +305,7 @@ du -sh /Library/Caches/
 du -sh ~/Library/Developer/Xcode/DerivedData/ 2>/dev/null
 
 # Check minimum file size filter
-cat ~/.MacCleanCLI/config.json | jq '.min_file_size_mb'
+cat ~/.macos-cleaner/config.json | jq '.min_file_size_mb'
 ```
 
 **Solutions:**
@@ -313,7 +313,7 @@ cat ~/.MacCleanCLI/config.json | jq '.min_file_size_mb'
 **1. Lower File Size Threshold:**
 ```bash
 # Edit config to scan smaller files
-nano ~/.MacCleanCLI/config.json
+nano ~/.macos-cleaner/config.json
 # Change: "min_file_size_mb": 0.0001  (100 bytes)
 ```
 
@@ -351,7 +351,7 @@ macos-cleaner --scan-only --verbose
 **1. Increase Worker Threads:**
 ```bash
 # Edit config file
-nano ~/.MacCleanCLI/config.json
+nano ~/.macos-cleaner/config.json
 # Change: "max_workers": 8
 # Default is 4, try 6-8 for faster scans
 ```
@@ -608,7 +608,7 @@ du -sh ~/Projects/*/node_modules/ 2>/dev/null
 # App should find all node_modules under ~/
 
 # If not, check config:
-cat ~/.MacCleanCLI/config.json
+cat ~/.macos-cleaner/config.json
 ```
 
 **2. Manual Cleanup:**
@@ -655,7 +655,7 @@ log show --predicate 'process == "Python"' --last 1h
 **1. Clear Application Data:**
 ```bash
 # Remove config (will recreate with defaults)
-rm ~/.MacCleanCLI/config.json
+rm ~/.macos-cleaner/config.json
 
 # Remove logs
 rm ~/.macos-cleaner/logs/*
@@ -702,16 +702,16 @@ JSONDecodeError: Expecting value: line 1 column 1 (char 0)
 **Solution:**
 ```bash
 # Backup current config
-cp ~/.MacCleanCLI/config.json ~/.MacCleanCLI/config.json.bak
+cp ~/.macos-cleaner/config.json ~/.macos-cleaner/config.json.bak
 
 # Remove corrupted config
-rm ~/.MacCleanCLI/config.json
+rm ~/.macos-cleaner/config.json
 
 # Run app to generate new config
 macos-cleaner
 
 # Or create valid config manually
-cat > ~/.MacCleanCLI/config.json << 'EOF'
+cat > ~/.macos-cleaner/config.json << 'EOF'
 {
   "dry_run": false,
   "enable_backup": true,
@@ -733,7 +733,7 @@ EOF
 
 ```bash
 # Create debug configuration
-cat > ~/.MacCleanCLI/debug_config.json << 'EOF'
+cat > ~/.macos-cleaner/debug_config.json << 'EOF'
 {
   "dry_run": true,
   "verbose": true,
@@ -744,7 +744,7 @@ cat > ~/.MacCleanCLI/debug_config.json << 'EOF'
 EOF
 
 # Run with debug config
-macos-cleaner --config ~/.MacCleanCLI/debug_config.json --verbose
+macos-cleaner --config ~/.macos-cleaner/debug_config.json --verbose
 
 # View detailed logs
 tail -f ~/.macos-cleaner/logs/cleaner_$(date +%Y%m%d).log
@@ -766,7 +766,7 @@ ls -la ~/Library/Caches/ | head -5
 ls -la /Library/Caches/ | head -5
 
 # Config check
-cat ~/.MacCleanCLI/config.json
+cat ~/.macos-cleaner/config.json
 
 # Recent errors
 tail -100 ~/.macos-cleaner/logs/*.log | grep -i error
@@ -813,7 +813,7 @@ ps aux | grep macos-cleaner
 **4. Reset to Factory State:**
 ```bash
 # Complete reset
-rm -rf ~/.MacCleanCLI/
+rm -rf ~/.macos-cleaner/
 rm -rf ~/.macos-cleaner/
 pip uninstall MacCleanCLI
 pip install -e .
@@ -837,7 +837,7 @@ pip show MacCleanCLI >> ~/debug-report.txt
 
 # 3. Configuration
 echo "\n=== Configuration ===" >> ~/debug-report.txt
-cat ~/.MacCleanCLI/config.json >> ~/debug-report.txt
+cat ~/.macos-cleaner/config.json >> ~/debug-report.txt
 
 # 4. Recent Logs
 echo "\n=== Recent Errors ===" >> ~/debug-report.txt

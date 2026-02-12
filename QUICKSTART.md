@@ -314,15 +314,15 @@ Access via `[4] ⚙️ Settings`:
 
 ### Config File
 
-Located at: `~/.MacCleanCLI/config.json`
+Located at: `~/.macos-cleaner/config.json`
 
 **Quick edits:**
 ```bash
 # Open config in editor
-nano ~/.MacCleanCLI/config.json
+nano ~/.macos-cleaner/config.json
 
 # Or reset to defaults
-rm ~/.MacCleanCLI/config.json
+rm ~/.macos-cleaner/config.json
 macos-cleaner  # Will create new config
 ```
 
@@ -441,7 +441,7 @@ python main.py
 cat ~/.macos-cleaner/logs/*.log
 
 # Reset config
-rm ~/.MacCleanCLI/config.json
+rm ~/.macos-cleaner/config.json
 ```
 
 For more issues, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
