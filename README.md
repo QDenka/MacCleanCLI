@@ -512,7 +512,7 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 ## 📞 Support & Community
 
 ### Get Help
-- 📖 **Documentation**: [QUICKSTART.md](QUICKSTART.md) • [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+- 📖 **Documentation**: [QUICKSTART.md](QUICKSTART.md) • [TROUBLESHOOTING.md](TROUBLESHOOTING.md) • [OPERATIONS.md](OPERATIONS.md)
 - 🐛 **Bug Reports**: [GitHub Issues](https://github.com/QDenka/MacCleanCLI/issues)
 - 💬 **Discussions**: [GitHub Discussions](https://github.com/QDenka/MacCleanCLI/discussions)
 - 📧 **Contact**: denis@kaban.dev
