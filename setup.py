@@ -17,10 +17,10 @@ setup(
     description="A beautiful console application for cleaning and optimizing macOS",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/qdenka/MacCleanCLI",
+    url="https://github.com/QDenka/MacCleanCLI",
     project_urls={
-        "Bug Tracker": "https://github.com/qdenka/MacCleanCLI/issues",
-        "Documentation": "https://github.com/qdenka/MacCleanCLI/wiki",
+        "Bug Tracker": "https://github.com/QDenka/MacCleanCLI/issues",
+        "Documentation": "https://github.com/QDenka/MacCleanCLI/wiki",
     },
     classifiers=[
         "Development Status :: 4 - Beta",
@@ -39,9 +39,9 @@ setup(
     py_modules=['main'],
     python_requires=">=3.10",
     install_requires=[
-        "rich>=13.7.0",
-        "psutil>=5.9.0",
-        "click>=8.1.0",
+        "rich>=14.0.0",
+        "psutil>=7.0.0",
+        "click>=8.2.1",
     ],
     entry_points={
         "console_scripts": [

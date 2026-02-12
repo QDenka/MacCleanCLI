@@ -1,11 +1,4 @@
-# Core dependencies
+# Runtime dependencies
 rich>=14.0.0
 psutil>=7.0.0
 click>=8.2.1
-
-# Development dependencies
-pytest>=8.4.0
-pytest-cov>=6.1.1
-black>=25.1.0
-flake8>=7.2.0
-mypy>=1.16.0

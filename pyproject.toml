@@ -28,26 +28,26 @@ classifiers = [
 ]
 
 dependencies = [
-    "rich>=13.7.0",
-    "psutil>=5.9.0",
-    "click>=8.1.0",
+    "rich>=14.0.0",
+    "psutil>=7.0.0",
+    "click>=8.2.1",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.4.0",
-    "pytest-cov>=4.1.0",
-    "black>=23.0.0",
-    "flake8>=6.1.0",
-    "mypy>=1.5.0",
+    "pytest>=8.4.0",
+    "pytest-cov>=6.1.1",
+    "black>=25.1.0",
+    "flake8>=7.2.0",
+    "mypy>=1.16.0",
     "homebrew-pypi-poet>=0.10.0",
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/macos-cleaner"
-Documentation = "https://github.com/yourusername/macos-cleaner/wiki"
-Repository = "https://github.com/yourusername/macos-cleaner.git"
-Issues = "https://github.com/yourusername/macos-cleaner/issues"
+Homepage = "https://github.com/QDenka/MacCleanCLI"
+Documentation = "https://github.com/QDenka/MacCleanCLI/wiki"
+Repository = "https://github.com/QDenka/MacCleanCLI.git"
+Issues = "https://github.com/QDenka/MacCleanCLI/issues"
 
 [project.scripts]
 macos-cleaner = "main:main"
