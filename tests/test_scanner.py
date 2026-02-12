@@ -3,6 +3,7 @@ Tests for the SystemScanner module
 """
 
 import pytest
+import sys
 from pathlib import Path
 from datetime import datetime, timedelta
 import tempfile
@@ -171,7 +172,12 @@ class TestSystemScanner:
         assert system_info.total_disk_space > 0
         assert system_info.total_memory > 0
         assert 0 <= system_info.cpu_usage <= 100
-        assert system_info.macos_version != ""
+
+        if sys.platform == "darwin":
+            assert system_info.macos_version != ""
+        else:
+            # On non-macOS runners this can be empty.
+            assert isinstance(system_info.macos_version, str)
 
 
 class TestScanResult:
