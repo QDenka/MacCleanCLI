@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import List, Optional, Set, Callable
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
 
 from models.scan_result import (
     FileInfo, CategoryResult, CleaningResult,
@@ -30,6 +31,7 @@ class SystemCleaner:
         self.backup_manager = BackupManager(config) if config.enable_backup else None
         self.dry_run = config.dry_run
         self.max_workers = config.max_workers or 4
+        self._result_lock = Lock()
 
         # Files/directories that should never be deleted
         self.protected_paths = {
@@ -194,23 +196,27 @@ class SystemCleaner:
 
                 logger.debug(f"Deleted: {file_path}")
 
-            result.add_deleted_file(file_path, file_info.size)
+            with self._result_lock:
+                result.add_deleted_file(file_path, file_info.size)
             return True
 
         except (PermissionError, InsufficientPermissionsError):
             error_msg = f"Permission denied: {file_path}"
             logger.error(error_msg)
-            result.add_failed_file(file_path, error_msg)
+            with self._result_lock:
+                result.add_failed_file(file_path, error_msg)
 
         except FileNotFoundError:
             error_msg = f"File not found: {file_path}"
             logger.debug(error_msg)
-            result.add_failed_file(file_path, error_msg)
+            with self._result_lock:
+                result.add_failed_file(file_path, error_msg)
 
         except (OSError, IOError) as e:
             error_msg = f"Failed to delete {file_path}: {str(e)}"
             logger.error(error_msg)
-            result.add_failed_file(file_path, error_msg)
+            with self._result_lock:
+                result.add_failed_file(file_path, error_msg)
 
         return False
 
@@ -324,10 +330,12 @@ class SystemCleaner:
 
         except (OSError, IOError) as e:
             logger.error(f"Failed to empty trash: {e}")
-            result.add_failed_file(trash_path, str(e))
+            with self._result_lock:
+                result.add_failed_file(trash_path, str(e))
         except PermissionError as e:
             logger.error(f"Permission denied emptying trash: {e}")
-            result.add_failed_file(trash_path, str(e))
+            with self._result_lock:
+                result.add_failed_file(trash_path, str(e))
 
         result.finish()
         return result

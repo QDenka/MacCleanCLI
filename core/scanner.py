@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import List, Dict, Set, Optional, Tuple
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
 
 from models.scan_result import (
     FileInfo, CategoryResult, ScanResult,
@@ -31,6 +32,7 @@ class SystemScanner:
         self.home_path = Path.home()
         self.library_path = self.home_path / "Library"
         self._stat_cache: Dict[Path, os.stat_result] = {}
+        self._result_lock = Lock()
 
         # Define scan paths for each category
         self.scan_paths = {
@@ -238,7 +240,7 @@ class SystemScanner:
                         if path.is_file():
                             file_info = self._analyze_file(path, category)
                             if file_info:
-                                result.add_file(file_info)
+                                self._add_file_safe(result, file_info)
                                 scanned_paths.append(path.name)
             except (PermissionError, InsufficientPermissionsError) as e:
                 logger.warning(f"Permission denied: {scan_path}")
@@ -307,7 +309,7 @@ class SystemScanner:
                         elif entry.is_file():
                             file_info = self._analyze_file(Path(entry.path), category)
                             if file_info:
-                                result.add_file(file_info)
+                                self._add_file_safe(result, file_info)
 
                     except (PermissionError, OSError):
                         continue
@@ -328,13 +330,19 @@ class SystemScanner:
         except (PermissionError, OSError):
             logger.warning(f"Cannot access directory: {directory}")
 
+    def _add_file_safe(self, result: CategoryResult, file_info: FileInfo) -> None:
+        """Thread-safe add to category result."""
+        with self._result_lock:
+            self._add_file_safe(result, file_info)
+
     def _analyze_file(self, file_path: Path, category: FileCategory) -> Optional[FileInfo]:
         """Analyze a file and determine if it should be cleaned."""
         try:
             stat = self._get_stat(file_path)
 
-            # Skip very small files
-            if stat.st_size < 1024:  # 1KB
+            # Skip very small files using config threshold
+            min_size_bytes = int(self.config.min_file_size_mb * 1024 * 1024)
+            if stat.st_size < min_size_bytes:
                 return None
 
             # Check if file matches cleanable criteria
@@ -471,7 +479,7 @@ class SystemScanner:
                             is_safe_to_delete=True,
                             description=f"Duplicate of {paths[0].name}"
                         )
-                        result.add_file(file_info)
+                        self._add_file_safe(result, file_info)
                     except (OSError, PermissionError):
                         continue
 
@@ -535,7 +543,7 @@ class SystemScanner:
             self.home_path / "Movies",
         ]
 
-        min_size = 100 * 1024 * 1024  # 100MB
+        min_size = int(self.config.large_file_threshold_mb * 1024 * 1024)
 
         for directory in scan_dirs:
             if not directory.exists():
@@ -557,7 +565,7 @@ class SystemScanner:
                                     is_safe_to_delete=True,
                                     description=f"Large file ({stat.st_size / (1024**3):.1f} GB)"
                                 )
-                                result.add_file(file_info)
+                                self._add_file_safe(result, file_info)
                         except (OSError, PermissionError):
                             continue
             except (PermissionError, OSError):
@@ -603,7 +611,7 @@ class SystemScanner:
                                     is_safe_to_delete=True,
                                     description=f"Not accessed for {age.days} days"
                                 )
-                                result.add_file(file_info)
+                                self._add_file_safe(result, file_info)
                         except (OSError, PermissionError):
                             continue
             except (PermissionError, OSError):
